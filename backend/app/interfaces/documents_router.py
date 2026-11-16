@@ -47,10 +47,20 @@ async def upload_documents(
     svc: DocumentService = Depends(document_service),
 ) -> UploadResponse:
     settings = get_settings()
+    # Enforce count + rate limits BEFORE buffering any bytes.
+    await svc.precheck(principal, len(files))
     cl = request.headers.get("content-length")
-    if cl and cl.isdigit() and int(cl) > settings.max_upload_bytes * 20:
+    if cl and cl.isdigit() and int(cl) > settings.max_request_bytes:
         raise PayloadTooLarge("Request body too large.")
-    incoming = [await _read_capped(f, settings.max_upload_bytes) for f in files]
+    # Read each file under the per-file cap AND an aggregate request cap (independent of headers).
+    incoming: list[IncomingFile] = []
+    total = 0
+    for f in files:
+        item = await _read_capped(f, settings.max_upload_bytes)
+        total += len(item.raw)
+        if total > settings.max_request_bytes:
+            raise PayloadTooLarge(f"Aggregate upload exceeds the {settings.max_request_bytes} byte limit.")
+        incoming.append(item)
     return await svc.upload(principal, parser, incoming)
 
 

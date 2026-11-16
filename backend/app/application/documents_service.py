@@ -43,15 +43,18 @@ class DocumentService:
         self._gemini_page_cutoff_enabled = gemini_page_cutoff_enabled
         self._max_files = max_files
 
+    async def precheck(self, principal: Principal, num_files: int) -> None:
+        """Validate count and enforce per-request rate limits BEFORE any file is buffered."""
+        if num_files == 0:
+            raise InvalidRequest("No files provided.")
+        if num_files > self._max_files:
+            raise InvalidRequest(f"At most {self._max_files} files per request.")
+        await self._limiter.check_burst(principal.id)
+        await self._limiter.check_daily(principal.id, principal.daily_limit)
+
     async def upload(self, principal: Principal, parser: ParserType, files: list[IncomingFile]) -> UploadResponse:
         if not files:
             raise InvalidRequest("No files provided.")
-        if len(files) > self._max_files:
-            raise InvalidRequest(f"At most {self._max_files} files per request.")
-
-        # Per-request limits.
-        await self._limiter.check_burst(principal.id)
-        await self._limiter.check_daily(principal.id, principal.daily_limit)
 
         batch_id = uuid4().hex
         accepted: list[UploadAccepted] = []

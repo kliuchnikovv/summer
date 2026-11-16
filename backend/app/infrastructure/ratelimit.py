@@ -70,6 +70,15 @@ class RedisRateLimiter:
         if count > self.s.rate_per_min:
             raise RateLimited(f"Rate limit of {self.s.rate_per_min} calls/min exceeded.", retry_after=60)
 
+    async def check_login(self, identifier: str) -> None:
+        """Throttle login attempts (keyed by username+IP) to blunt brute-forcing."""
+        key = f"ratelimit:login:{identifier}:{_minute()}"
+        count = await self.redis.incr(key)
+        if count == 1:
+            await self.redis.expire(key, 60)
+        if count > self.s.login_max_per_min:
+            raise RateLimited("Too many login attempts; try again shortly.", retry_after=60)
+
     async def try_acquire_slot(self, principal: str, doc_id: str) -> bool:
         res = await self.redis.eval(
             _ACQUIRE_SLOT_LUA, 1, f"inflight:{principal}",

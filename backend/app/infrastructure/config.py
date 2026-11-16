@@ -24,13 +24,21 @@ class Settings(BaseSettings):
     openrouter_title: str = "Summer PDF Processing"
 
     # Upload limits
-    max_upload_bytes: int = 20 * 1024 * 1024  # 20 MB, aligned to Gemini inline limit
+    max_upload_bytes: int = 20 * 1024 * 1024  # 20 MB per file, aligned to Gemini inline limit
+    max_request_bytes: int = 60 * 1024 * 1024  # aggregate cap across all files in one request
     gemini_max_pages: int = 1000
+    # OCR rendering safety: scale a page down so its raster never exceeds this pixel budget.
+    ocr_max_pixels: int = 4_000_000  # ~4 MP per page
+
+    # Login brute-force protection (attempts/min per username+IP).
+    login_max_per_min: int = 10
 
     # Raw-bytes retention in Redis
     raw_ttl_seconds: int = 24 * 3600
 
-    # Auth: comma-separated "key:principal" pairs (for curl / programmatic access).
+    # Auth. NOTE: the defaults below are DEMO credentials for zero-config local boot only.
+    # Always override API_KEYS and ACCOUNTS via .env in any shared/production deployment.
+    # API keys: comma-separated "key:principal" pairs (for curl / programmatic access).
     api_keys: str = "demo-key:demo-user"
 
     # Login accounts: comma-separated "username:password:principal:daily_limit".

@@ -53,6 +53,20 @@ async def test_logout_invalidates_token(client, monkeypatch):
     get_settings.cache_clear()
 
 
+async def test_login_brute_force_throttled(client, monkeypatch):
+    """Repeated login attempts are rate-limited (429) to blunt brute-forcing."""
+    monkeypatch.setenv("ACCOUNTS", "tester:test-pass-123:tester:10")
+    monkeypatch.setenv("LOGIN_MAX_PER_MIN", "5")
+    get_settings.cache_clear()
+    codes = []
+    for _ in range(6):
+        r = await client.post("/auth/login", json={"username": "tester", "password": "wrong"})
+        codes.append(r.status_code)
+    assert codes[:5] == [401] * 5   # wrong password
+    assert codes[5] == 429          # throttled after the limit
+    get_settings.cache_clear()
+
+
 async def test_account_daily_limit_enforced(client, pdf_factory, monkeypatch):
     """The test account is capped at 10 uploads/day -> 11th is 429."""
     get_settings.cache_clear()

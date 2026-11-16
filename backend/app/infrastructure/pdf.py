@@ -39,9 +39,24 @@ def extract_text_pages(raw: bytes) -> list[str]:
     return out
 
 
-def render_pages_png(raw: bytes, dpi: int = 150) -> list[bytes]:
-    """Rasterize each page to PNG via PyMuPDF (for OCR / image-based parsing)."""
+def open_pdf(raw: bytes):
+    """Open a PDF for page-by-page rendering (PyMuPDF)."""
     import pymupdf
 
-    doc = pymupdf.open(stream=raw, filetype="pdf")
-    return [page.get_pixmap(dpi=dpi).tobytes("png") for page in doc]
+    return pymupdf.open(stream=raw, filetype="pdf")
+
+
+def render_page_png(doc, index: int, dpi: int = 150, max_pixels: int | None = None) -> bytes:
+    """Rasterize ONE page to PNG, scaling down so width*height stays under max_pixels.
+
+    Rendering one page at a time (not a whole-document list) bounds worker memory, and the
+    pixel cap stops a maliciously huge page from exhausting memory regardless of the cap.
+    """
+    import pymupdf
+
+    page = doc[index]
+    scale = dpi / 72.0
+    w, h = float(page.rect.width) * scale, float(page.rect.height) * scale
+    if max_pixels and w * h > max_pixels > 0:
+        scale *= (max_pixels / (w * h)) ** 0.5
+    return page.get_pixmap(matrix=pymupdf.Matrix(scale, scale)).tobytes("png")

@@ -13,8 +13,9 @@ from app.domain.errors import ParserError
 from app.domain.models import ParserType
 from app.domain.services import split_pages
 from app.infrastructure import openrouter
+from app.infrastructure.config import get_settings
 from app.infrastructure.parsers.base import OpenRouterParserBase
-from app.infrastructure.pdf import render_pages_png
+from app.infrastructure.pdf import open_pdf, render_page_png
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,16 @@ class GeminiParser(OpenRouterParserBase):
             yield i, chunk
 
     async def _image_pages(self, raw: bytes) -> AsyncIterator[tuple[int, str]]:
+        max_pixels = get_settings().ocr_max_pixels
         try:
-            images = await asyncio.to_thread(render_pages_png, raw)
+            doc = await asyncio.to_thread(open_pdf, raw)
         except Exception as exc:  # noqa: BLE001
-            raise ParserError(f"Page rasterization failed: {exc}") from exc
-        for i, png in enumerate(images):
+            raise ParserError(f"Could not open PDF: {exc}") from exc
+        for i in range(doc.page_count):  # render one page at a time -> bounded memory
+            try:
+                png = await asyncio.to_thread(render_page_png, doc, i, 150, max_pixels)
+            except Exception as exc:  # noqa: BLE001
+                raise ParserError(f"Page rasterization failed on page {i + 1}: {exc}") from exc
             try:
                 md = await openrouter.parse_image(png)
             except Exception as exc:  # noqa: BLE001
