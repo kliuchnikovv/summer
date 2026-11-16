@@ -46,8 +46,8 @@ services:
   worker:
     build: ./backend
     restart: unless-stopped
-    command: ["python", "-m", "app.worker"]
     environment:
+      APP_ROLE: worker  # same image as api; this selects the worker role
       REDIS_URL: redis://redis:6379/0
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}

@@ -14,6 +14,7 @@ COPY app ./app
 
 EXPOSE 8000
 
-# Default: API server. Honors $PORT (Railway/PaaS) and falls back to 8000 locally.
-# The worker service overrides this command (docker-compose / Railway start command).
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# One image, two roles. APP_ROLE=worker runs the stream consumer; anything else runs the
+# API server (honoring $PORT for Railway/PaaS, falling back to 8000 locally). This lets a
+# platform that can't set a per-service start command (e.g. Railway CLI) pick the role via env.
+CMD ["sh", "-c", "if [ \"$APP_ROLE\" = worker ]; then exec python -m app.worker; else exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}; fi"]
