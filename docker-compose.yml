@@ -1,0 +1,71 @@
+services:
+  redis:
+    image: redis:7-alpine
+    # AOF persistence so the stream, consumer-group PEL and doc state survive restarts
+    # (the resumability story depends on this). Named volume keeps data across `down`.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_PARSE_MODEL: ${OPENROUTER_PARSE_MODEL:-google/gemini-3.1-flash-lite}
+      OPENROUTER_SUMMARY_MODEL: ${OPENROUTER_SUMMARY_MODEL:-google/gemini-3.1-flash-lite}
+      OPENROUTER_OCR_MODEL: ${OPENROUTER_OCR_MODEL:-openai/gpt-5-mini}
+      OPENROUTER_MAX_TOKENS: ${OPENROUTER_MAX_TOKENS:-4096}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-20971520}
+      GEMINI_MAX_PAGES: ${GEMINI_MAX_PAGES:-1000}
+      API_KEYS: ${API_KEYS:-demo-key:demo-user}
+      ACCOUNTS: ${ACCOUNTS:-tester:test-pass-123:tester:10}
+      DAILY_LIMIT: ${DAILY_LIMIT:-100}
+      MAX_CONCURRENT: ${MAX_CONCURRENT:-5}
+      RATE_PER_MIN: ${RATE_PER_MIN:-30}
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_PARSE_MODEL: ${OPENROUTER_PARSE_MODEL:-google/gemini-3.1-flash-lite}
+      OPENROUTER_SUMMARY_MODEL: ${OPENROUTER_SUMMARY_MODEL:-google/gemini-3.1-flash-lite}
+      OPENROUTER_OCR_MODEL: ${OPENROUTER_OCR_MODEL:-openai/gpt-5-mini}
+      OPENROUTER_MAX_TOKENS: ${OPENROUTER_MAX_TOKENS:-4096}
+      GEMINI_MAX_PAGES: ${GEMINI_MAX_PAGES:-1000}
+      MAX_CONCURRENT: ${MAX_CONCURRENT:-5}
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Scale workers for parallel processing: docker compose up --scale worker=3
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  redisdata:

@@ -1,0 +1,15 @@
+# Python
+backend/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+
+# Env & secrets
+.env
+
+# OS
+.DS_Store
